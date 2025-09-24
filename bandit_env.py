@@ -64,10 +64,13 @@ class KArmedBanditEnv(BaseEnv):
         self._rng: np.random.Generator = rng or np.random.default_rng()
 
         # TODO (student): define action and observation spaces
-
+        self.action_space = spaces.Discrete(self.k)
+        self.observation_space = spaces.Discrete(1)
 
         # Internal state (true per-arm probabilities)
         self.p: Optional[np.ndarray] = None
+
+    
 
     def reset(self, *, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None) -> Tuple[int, Dict[str, Any]]:
         """Reset the environment and (re)sample per-arm probabilities ``p``.
@@ -79,8 +82,16 @@ class KArmedBanditEnv(BaseEnv):
         - Sample ``self.p ~ Uniform(0,1)^k`` (NumPy: ``self._rng.uniform``) and store it.
         - Return ``(0, {})``.
         """
-        raise NotImplementedError("TODO: implement reset() for KArmedBanditEnv")
-
+    # If seed is provided, reseed the RNG for reproducibility
+        if seed is not None:
+            self._rng = np.random.default_rng(seed)
+    
+    # Sample self.p ~ Uniform(0,1)^k (one probability per arm)
+        self.p = self._rng.uniform(0.0, 1.0, size=self.k)
+    
+    # Return dummy observation and empty info dict
+        return 0, {}
+    
     def step(self, action: int) -> Tuple[int, int, bool, bool, Dict[str, Any]]:
         """Advance one step by sampling a Bernoulli reward for ``action``.
 
@@ -92,5 +103,37 @@ class KArmedBanditEnv(BaseEnv):
         """
         raise NotImplementedError("TODO: implement step() for KArmedBanditEnv")
 
+
+    def step(self, action: int) -> Tuple[int, int, bool, bool, Dict[str, Any]]:
+        """Advance one step by sampling a Bernoulli reward for ``action``.
+
+         Student TODO:
+        - If ``self.nonstationary``: apply Gaussian noise (std ``self.sigma``) to ``self.p`` and clip to ``[0,1]``.
+        - Sample reward ``r in {0,1}`` as ``Bernoulli(p[action])`` using ``self._rng.random()``.
+        - Compute ``optimal = 1`` if ``action`` equals ``argmax(self.p)``, else ``0``.
+        - Return ``(0, r, False, False, {"p": self.p.copy(), "optimal": optimal})``.
+        """
+    # Handle non-stationary case (bonus): add Gaussian noise to probabilities
+        if self.nonstationary:
+            # Apply Gaussian noise with std self.sigma and clip to [0,1]
+            noise = self._rng.normal(0.0, self.sigma, size=self.k)
+            self.p = np.clip(self.p + noise, 0.0, 1.0)
+        
+        # Sample Bernoulli reward: r ~ Bernoulli(p[action])
+        # This gives reward=1 with probability p[action], else reward=0
+        reward = 1 if self._rng.random() < self.p[action] else 0
+        
+        # Check if this action was optimal (highest probability)
+        optimal_action = np.argmax(self.p)
+        optimal = 1 if action == optimal_action else 0
+        
+        # Prepare info dictionary
+        info = {
+            "p": self.p.copy(),  # Current arm probabilities
+            "optimal": optimal   # Whether action was optimal
+        }
+        
+        # Return: (observation, reward, terminated, truncated, info)
+        return 0, reward, False, False, info
     def render(self) -> None:  # pragma: no cover - not required
         return None
